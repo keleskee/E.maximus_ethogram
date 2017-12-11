@@ -1,0 +1,179 @@
+---
+title: "Elephas maximus Ethogram Analysis"
+author: "Erin Keleske"
+date: "11/14/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+
+require(base)
+require(devtools)
+require(factoextra)
+require(ggfortify)
+require(ggplot2)
+require(gplots)
+require(lattice)
+require(MASS)
+require(mosaic)
+require(pheatmap)
+require(RCurl)
+require(readr)
+require(repmis)
+require(stats)
+
+```
+
+Import data 
+```{r}
+association <- source_data("https://github.com/keleskee/E.maximus_ethogram/raw/master/association.csv")
+stress <- source_data("https://github.com/keleskee/E.maximus_ethogram/raw/master/elephant.stress.csv")
+mean.assoc <- source_data("https://github.com/keleskee/E.maximus_ethogram/raw/master/mean.assoc.csv")
+supplant <- source_data("https://github.com/keleskee/E.maximus_ethogram/raw/master/supplant.csv")
+proximity <- source_data("https://github.com/keleskee/E.maximus_ethogram/raw/master/prox.csv")
+avg <- source_data("https://github.com/keleskee/E.maximus_ethogram/raw/master/average_expanded.csv")
+expanded <- source_data("https://github.com/keleskee/E.maximus_ethogram/raw/master/expanded.csv")
+
+```
+
+Association
+```{r}
+
+connie.assoc <- subset(association, elephant == "Connie")
+phoebe.assoc <- subset(association, elephant == "Phoebe")
+rudy.assoc <- subset(association, elephant == "Rudy")
+sundara.assoc <- subset(association, elephant == "Sundara")
+
+bwplot(perc_time~friend, data=connie.assoc)
+bwplot(perc_time~friend, data=phoebe.assoc)
+bwplot(perc_time~friend, data=rudy.assoc)
+bwplot(perc_time~friend, data=sundara.assoc)
+
+```
+
+```{r}
+association <- mean.assoc[,2:5]
+association <- as.matrix(sapply(association, as.numeric))
+row.names(association) <- c("Connie", "Phoebe", "Rudy", "Sundara")
+
+palette_rev <- rev(gray.colors(256))
+heatmap(association, 
+        col=palette_rev,
+        Colv="Rowv", 
+        cexRow=1,  cexCol=1)
+
+colnames(mean.assoc) <- c("elephant", "Connie", "Phoebe", "Rudy", "Sundara")
+mean.assoc$mean <- rowMeans(mean.assoc[,2:5], na.rm=TRUE)
+
+```
+
+Maintenance of Proximity
+```{r}
+resp_prox <- proximity[,2:5]
+resp_prox <- as.matrix(sapply(resp_prox, as.numeric))
+colnames(resp_prox) <- c("Connie", "Phoebe", "Rudy", "Sundara")
+row.names(resp_prox) <- c("Connie", "Phoebe", "Rudy", "Sundara")
+
+heatmap(resp_prox, 
+        col=palette_rev,
+        Colv="Rowv", 
+        cexRow=1,  cexCol=1)
+```
+
+Stress Behavior 
+```{r}
+stress$tot_stress <- stress$sway_perc + stress$fidget_perc + stress$survey_perc + stress$pull_perc 
+
+average <- subset(stress, sex!="male")
+average <- subset(average, select=c("name", "tot_stress"))
+average <- aggregate(.~name, data=average, mean)
+
+levels(average$name) <- c("Phoebe", "Connie", "Rudy", "Sundara")
+bar <- ggplot(data=average, aes(x=name, y=tot_stress))+
+  geom_bar(stat="identity", position=position_dodge())+
+  labs(x="Elephant", y="Proportion of Time Spent on Stress Behavior")
+bar
+```
+
+Correlation
+```{r}
+prox_avg <- proximity
+colnames(prox_avg) <- c("elephant", "Connie", "Phoebe", "Rudy", "Sundara")
+prox_avg$Connie <- prox_avg$Connie + 1
+prox_avg$Phoebe <- prox_avg$Phoebe + 1
+prox_avg$Rudy <- prox_avg$Rudy + 1
+prox_avg$Sundara <- prox_avg$Sundara + 1
+prox_avg[prox_avg == 1] <- NA
+prox_avg$average <- rowMeans(prox_avg[,2:5], na.rm=TRUE)
+
+average$mean_prox <- prox_avg$average
+
+plot(average$tot_stress~average$mean_prox)
+```
+
+Stress behavior by elephant
+```{r}
+bar <- ggplot(data=avg, aes(x=behavior, y=average_time, fill=name))+
+  geom_bar(stat="identity", position=position_dodge())+
+  labs(x="Behavior", y="Mean % Time Spent")
+bar
+```
+
+Stress PCA
+```{r}
+dom <- data.frame(matrix(nrow=4, ncol=9))
+colnames(dom) <- c("elephant", "association", "proximity", "supplant", "sway", "survey", "pull", "fidget", "stress")
+dom$elephant <- c("Connie", "Phoebe", "Rudy", "Sundara")
+dom$association <- as.numeric(mean.assoc$mean)
+dom$proximity <- as.numeric(prox_avg$average)
+dom$supplant <- as.numeric(c(3, 5, 3, 1))
+
+stress2 <- stress[26:46,]
+dom.connie <- subset(stress2, name == "Connie")
+dom.phoebe <- subset(stress2, name == "Phoebe")
+dom.rudy <- subset(stress2, name == "Rudy")
+dom.sundara <- subset(stress2, name == "Sundara")
+
+dom$sway <- c(mean(dom.connie$sway_perc), mean(dom.phoebe$sway_perc), mean(dom.rudy$sway_perc), mean(dom.sundara$sway_perc))
+dom$survey <- c(mean(dom.connie$survey_perc), mean(dom.phoebe$survey_perc), mean(dom.rudy$survey_perc), mean(dom.sundara$survey_perc))
+dom$pull <- c(mean(dom.connie$pull_perc), mean(dom.phoebe$pull_perc), mean(dom.rudy$pull_perc), mean(dom.sundara$pull_perc))
+dom$fidget <- c(mean(dom.connie$fidget_perc), mean(dom.phoebe$fidget_perc), mean(dom.rudy$fidget_perc), mean(dom.sundara$fidget_perc))
+dom$stress <- rowMeans(dom[,5:8])
+
+log.dom <- log(dom[,2:4])
+dom.name <- dom[,1]
+dom.pca <- prcomp(log.dom, 
+                  center= TRUE, 
+                  scale. =TRUE)
+print(dom.pca)
+```
+
+```{r}
+plot(dom.pca, type="l")
+```
+```{r}
+summary(dom.pca)
+```
+```{r}
+predict(dom.pca, 
+        newdata=tail(log.dom, 2))
+```
+```{r}
+autoplot(prcomp(log.dom), data=dom, colour="elephant")
+```
+
+```{r}
+biplot(dom.pca, scale=0)
+```
+```{r}
+eig.val <- get_eigenvalue(dom.pca)
+res.var <- get_pca_var(dom.pca)
+res.ind <- get_pca_ind(dom.pca)
+```
+
+```{r}
+fviz_eig(dom.pca, addlabels = TRUE)
+```
+
